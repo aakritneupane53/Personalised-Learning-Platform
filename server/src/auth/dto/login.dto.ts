@@ -1,6 +1,6 @@
 import { IsString, MinLength, MaxLength, IsEmail } from 'class-validator';
 
-export class RegisterDto {
+export class LoginDto {
   @IsString()
   @IsEmail({}, { message: 'Email is required' })
   @MaxLength(50, { message: 'Email can be atmost 100 characters long' })
