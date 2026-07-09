@@ -3,19 +3,19 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
-import { v4 as uuid } from 'uuid';
 
 import { UsersService } from 'src/users/users.service';
-import { RedisService } from 'src/redis/redis.service';
 import { RegisterUserDto } from './dto/register-user.dto';
 
 @Injectable()
 export class AuthService {
   constructor(
+    private readonly configService: ConfigService,
     private readonly usersService: UsersService,
-    private readonly redisService: RedisService,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -35,7 +35,7 @@ export class AuthService {
       password: hashedPassword,
     });
 
-    return this.createSession(user.id);
+    return this.generateTokens(user.id);
   }
 
   async login(email: string, password: string) {
@@ -51,61 +51,38 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    return this.createSession(user.id);
+    return this.generateTokens(user.id);
   }
 
   async refresh(refreshToken: string) {
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token missing');
+    }
+
     try {
-      const payload = await this.jwtService.verifyAsync(refreshToken);
+      const payload = await this.jwtService.verifyAsync(refreshToken, {
+        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+      });
 
-      const userId = payload.sub;
-      const sessionId = payload.sid;
+      const user = await this.usersService.findById(payload.sub);
 
-      const session = await this.redisService.client.get(
-        `session:${sessionId}`,
-      );
-
-      if (!session) {
-        throw new UnauthorizedException('Session expired');
+      if (!user) {
+        throw new UnauthorizedException();
       }
 
-      const parsedSession = JSON.parse(session);
-
-      const validRefreshToken = await argon2.verify(
-        parsedSession.refreshTokenHash,
-        refreshToken,
-      );
-
-      if (!validRefreshToken) {
-        await this.redisService.client.del(`session:${sessionId}`);
-
-        throw new UnauthorizedException('Invalid refresh token');
-      }
-
-      return this.createSession(userId, sessionId);
+      return this.generateTokens(user.id);
     } catch {
-      throw new UnauthorizedException('Invalid refresh token');
+      throw new UnauthorizedException('Invalid or expired refresh token');
     }
   }
 
-  async logout(refreshToken: string) {
-    try {
-      const payload = await this.jwtService.verifyAsync(refreshToken);
-
-      await this.redisService.client.del(`session:${payload.sid}`);
-    } catch {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
-  }
-
-  private async createSession(userId: string, sessionId?: string) {
-    const sid = sessionId ?? uuid();
-
+  private async generateTokens(userId: string) {
     const accessToken = await this.jwtService.signAsync(
       {
         sub: userId,
       },
       {
+        secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
         expiresIn: '15m',
       },
     );
@@ -113,23 +90,11 @@ export class AuthService {
     const refreshToken = await this.jwtService.signAsync(
       {
         sub: userId,
-        sid,
       },
       {
+        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
         expiresIn: '30d',
       },
-    );
-
-    const refreshTokenHash = await argon2.hash(refreshToken);
-
-    await this.redisService.client.set(
-      `session:${sid}`,
-      JSON.stringify({
-        userId,
-        refreshTokenHash,
-      }),
-      'EX',
-      60 * 60 * 24 * 30,
     );
 
     return {
