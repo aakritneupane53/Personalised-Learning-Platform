@@ -7,6 +7,9 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { RedisModule } from './redis/redis.module';
+import { CourseModule } from './course/course.module';
+import { AiModule } from './ai/ai.module';
+import { CourseContentModule } from './course-content/course-content.module';
 
 @Module({
   imports: [
@@ -34,6 +37,9 @@ import { RedisModule } from './redis/redis.module';
     RedisModule,
     UsersModule,
     AuthModule,
+    CourseModule,
+    AiModule,
+    CourseContentModule,
   ],
   controllers: [AppController],
   providers: [AppService],

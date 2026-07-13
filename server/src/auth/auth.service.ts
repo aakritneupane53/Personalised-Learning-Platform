@@ -42,13 +42,13 @@ export class AuthService {
     const user = await this.usersService.findByEmail(email);
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('User with this email doesnot exist');
     }
 
     const validPassword = await argon2.verify(user.password, password);
 
     if (!validPassword) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException('Invalid Password');
     }
 
     return this.generateTokens(user.id);
