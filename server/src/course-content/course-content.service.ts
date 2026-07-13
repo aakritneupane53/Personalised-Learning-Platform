@@ -34,15 +34,11 @@ export class CourseContentService {
     moduleId: string,
     authenticatedUserId: string,
   ) {
+    // 1. Fetch targeted module metadata & validate ownership context
     const targetModule = await this.modulesService.findOneWithContext(moduleId);
     const parentCourse = await this.courseService.findOne(
       targetModule.courseId,
     );
-    // console.log('Authenticated User ID:', typeof authenticatedUserId);
-    // console.log('Parent Course User ID:', parentCourse.userId);
-    // console.log(parentCourse.userId === authenticatedUserId);
-    // console.log('Target Module:', targetModule);
-    // console.log('Parent Course:', parentCourse);
 
     if (parentCourse.userId !== authenticatedUserId) {
       throw new NotFoundException(
@@ -50,6 +46,26 @@ export class CourseContentService {
       );
     }
 
+    // 🛑 OPTIMIZATION: Check if lessons already exist for this module_id
+    const existingLessons = await this.lessonRepository.find({
+      where: { moduleId: targetModule.id },
+      order: { orderIndex: 'ASC' },
+    });
+
+    if (existingLessons.length > 0) {
+      // 🚀 Cache hit: Data already exists! Pull quizzes and return immediately.
+      // This completely skips the AI cost and duplicate DB writes.
+      const existingQuiz = await this.quizRepository.find({
+        where: { moduleId: targetModule.id },
+      });
+
+      return {
+        lessons: existingLessons,
+        quiz: existingQuiz,
+      };
+    }
+
+    // 2. Cache miss: Safe to fire the expensive heavy reasoning AI workload
     const contentPayload = await this.aiService.generateModuleContent(
       targetModule.title,
       targetModule.shortDescription || 'Comprehensive module study details.',
@@ -62,6 +78,7 @@ export class CourseContentService {
       targetModule.orderIndex,
     );
 
+    // 3. Execute transactional multi-table commit
     return await this.dataSource.manager.transaction(async (manager) => {
       const lessonsToSave = contentPayload.lessons.map((lessonContent, index) =>
         manager.create(Lesson, {
@@ -101,7 +118,6 @@ export class CourseContentService {
       };
     });
   }
-
   /**
    * FETCH ALL LESSONS BY MODULE ID
    */
