@@ -17,11 +17,15 @@ import { UpdateCourseDto } from './dto/update-course.dto';
 import { Course } from './entities/course.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'; // Adjust path to your actual Auth Guard
 import { User } from '../auth/decorators/user.decorator'; // Adjust path to your actual @User decorator
+import { ModulesService } from './module.service';
 
 @Controller('courses')
 @UseGuards(JwtAuthGuard) // Protects all routes in this controller
 export class CourseController {
-  constructor(private readonly courseService: CourseService) {}
+  constructor(
+    private readonly courseService: CourseService,
+    private readonly modulesService: ModulesService,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -69,5 +73,14 @@ export class CourseController {
     @User() user: any,
   ): Promise<void> {
     await this.courseService.remove(id, user.id);
+  }
+
+  @Get('modules/:courseId')
+  @UseGuards(JwtAuthGuard)
+  async findModules(
+    @User() user: any,
+    @Param('courseId', ParseUUIDPipe) courseId,
+  ) {
+    return await this.modulesService.findByCourseId(courseId);
   }
 }
