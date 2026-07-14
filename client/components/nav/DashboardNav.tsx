@@ -43,7 +43,7 @@ export default function DashboardNav() {
               <path d="M 42,20 L 40,10 M 48,20 L 48,8" />
               <circle cx="53" cy="26" r="2" fill="currentColor" />
             </svg>
-            <span className="body-strong font-semibold tracking-tight">Ollama Learn</span>
+            <span className="body-strong font-semibold tracking-tight">Learnify</span>
           </Link>
 
           <div className="hidden md:flex items-center gap-6">

@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { CreateCourseSchema, CreateCourseInput } from "@/lib/validations";
 import { useCreateCourseMutation } from "@/lib/queries/courses";
 import { parseServerError } from "@/lib/axios";
+import { CourseCategoryEnum, CATEGORY_META } from "@/lib/categories";
 
 const SKILL_LEVELS: CreateCourseInput["skillLevel"][] = [
   "beginner",
@@ -29,6 +30,7 @@ export default function CourseForm() {
       title: "",
       topic: "",
       skillLevel: "beginner",
+      category: "other",
     },
   });
 
@@ -108,6 +110,28 @@ export default function CourseForm() {
           </select>
           {errors.skillLevel && (
             <p className="text-xs text-red-600 px-1 font-medium mt-0.5">{errors.skillLevel.message}</p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="category" className="body-sm-strong text-ink px-1">
+            Category
+          </label>
+          <select
+            id="category"
+            {...register("category")}
+            className={`w-full h-10 border bg-canvas text-ink text-sm px-4 rounded-full outline-none transition-colors ${
+              errors.category ? "border-red-500 focus:border-red-500" : "border-hairline focus:border-ink"
+            }`}
+          >
+            {CourseCategoryEnum.map((category) => (
+              <option key={category} value={category}>
+                {CATEGORY_META[category].label}
+              </option>
+            ))}
+          </select>
+          {errors.category && (
+            <p className="text-xs text-red-600 px-1 font-medium mt-0.5">{errors.category.message}</p>
           )}
         </div>
 

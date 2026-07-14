@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
   UseGuards,
   ParseUUIDPipe,
   HttpCode,
@@ -14,7 +15,7 @@ import {
 import { CourseService } from './course.service';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
-import { Course } from './entities/course.entity';
+import { Course, CourseCategory } from './entities/course.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'; // Adjust path to your actual Auth Guard
 import { User } from '../auth/decorators/user.decorator'; // Adjust path to your actual @User decorator
 import { ModulesService } from './module.service';
@@ -39,8 +40,10 @@ export class CourseController {
 
   @Get()
   @UseGuards(JwtAuthGuard)
-  async findAll(): Promise<Course[]> {
-    return await this.courseService.findAll();
+  async findAll(
+    @Query('category') category?: CourseCategory,
+  ): Promise<Course[]> {
+    return await this.courseService.findAll(category);
   }
 
   @Get(':id')

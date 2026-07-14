@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CourseCategoryEnum } from "@/lib/categories";
 
 export const LoginSchema = z.object({
   email: z
@@ -32,6 +33,7 @@ export type LoginInput = z.infer<typeof LoginSchema>;
 export type RegisterInput = z.infer<typeof RegisterSchema>;
 
 export const SkillLevelEnum = z.enum(["beginner", "intermediate", "advanced"]);
+export const CategoryEnum = z.enum(CourseCategoryEnum);
 
 export const CreateCourseSchema = z.object({
   title: z
@@ -43,6 +45,7 @@ export const CreateCourseSchema = z.object({
     .min(1, "Topic is required")
     .max(255, "Topic must be less than 255 characters"),
   skillLevel: SkillLevelEnum,
+  category: CategoryEnum,
 });
 
 export type CreateCourseInput = z.infer<typeof CreateCourseSchema>;

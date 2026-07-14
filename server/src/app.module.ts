@@ -10,6 +10,7 @@ import { RedisModule } from './redis/redis.module';
 import { CourseModule } from './course/course.module';
 import { AiModule } from './ai/ai.module';
 import { CourseContentModule } from './course-content/course-content.module';
+import { UserProgressModule } from './user-progress/user-progress.module';
 
 @Module({
   imports: [
@@ -21,18 +22,25 @@ import { CourseContentModule } from './course-content/course-content.module';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
+      useFactory: (configService: ConfigService) => {
+        const connectionString = configService.get<string>('NEON_DB');
 
-        host: configService.get<string>('DB_HOST'),
-        port: Number(configService.get('DB_PORT')),
-        username: configService.get<string>('DB_USER'),
-        password: configService.get<string>('DB_PASSWORD'),
-        database: configService.get<string>('DB_NAME'),
+        if (!connectionString) {
+          throw new Error(
+            'NEON_DB connection string is missing from the environment variables configuration.',
+          );
+        }
 
-        autoLoadEntities: true,
-        synchronize: true,
-      }),
+        return {
+          type: 'postgres' as const,
+          url: connectionString,
+          ssl: {
+            rejectUnauthorized: false,
+          },
+          autoLoadEntities: true,
+          synchronize: true,
+        };
+      },
     }),
     RedisModule,
     UsersModule,
@@ -40,6 +48,7 @@ import { CourseContentModule } from './course-content/course-content.module';
     CourseModule,
     AiModule,
     CourseContentModule,
+    UserProgressModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -3,10 +3,9 @@ import {
   NotFoundException,
   ForbiddenException,
   ConflictException,
-  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Course, CourseStatus } from './entities/course.entity';
+import { Course, CourseStatus, CourseCategory } from './entities/course.entity';
 import { ModuleEntity } from './entities/module.entity'; // 🌟 Added import
 import { Repository, DataSource } from 'typeorm'; // 🌟 Added DataSource for transactions
 import { CreateCourseDto } from './dto/create-course.dto';
@@ -43,14 +42,15 @@ export class CourseService {
       );
     }
 
+    const category = createCourseDto.category ?? CourseCategory.OTHER;
+
+    // generateCourseOutline throws before returning anything that isn't already
+    // validated against CourseOutlineSchema, so aiResponse is safe to trust here.
     const aiResponse = await this.aiService.generateCourseOutline(
       createCourseDto.topic,
       createCourseDto.skillLevel,
+      category,
     );
-
-    if (!aiResponse || !Array.isArray(aiResponse.modules)) {
-      throw new BadRequestException('AI outline structure validation failure.');
-    }
 
     // Wrap both independent writes inside a single atomic sequence
     return await this.dataSource.manager.transaction(async (manager) => {
@@ -59,6 +59,7 @@ export class CourseService {
         title: aiResponse.title,
         topic: createCourseDto.topic.toUpperCase(),
         skillLevel: createCourseDto.skillLevel,
+        category,
         userId: authenticatedUserId,
         status: CourseStatus.DRAFT,
         rawAiOutput: aiResponse,
@@ -66,7 +67,7 @@ export class CourseService {
       const savedCourse = await manager.save(Course, newCourseInstance);
 
       // B. Parse out matching outline nodes and assign to structural rows
-      const modulesToSave = aiResponse.modules.map((mod: any) =>
+      const modulesToSave = aiResponse.modules.map((mod) =>
         manager.create(ModuleEntity, {
           courseId: savedCourse.id, // Unidirectional field binding reference
           title: mod.title,
@@ -80,8 +81,10 @@ export class CourseService {
     });
   }
 
-  async findAll(): Promise<Course[]> {
-    return await this.courseRepository.find({});
+  async findAll(category?: CourseCategory): Promise<Course[]> {
+    return await this.courseRepository.find({
+      where: category ? { category } : {},
+    });
   }
 
   async findOne(id: string): Promise<Course> {

@@ -6,6 +6,7 @@ import axios from "axios";
 import { ArrowLeft } from "lucide-react";
 import { useCourseQuery, useModulesQuery } from "@/lib/queries/courses";
 import ModuleRow from "@/components/courses/ModuleRow";
+import { getCategoryMeta } from "@/lib/categories";
 
 export default function CourseDetailPage({
   params,
@@ -62,9 +63,14 @@ export default function CourseDetailPage({
       </Link>
 
       <div>
-        <span className="text-xs font-medium uppercase tracking-wide px-2.5 py-1 rounded-full border border-hairline-strong text-charcoal mb-3 inline-block">
-          {course.skillLevel}
-        </span>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xs font-medium uppercase tracking-wide px-2.5 py-1 rounded-full border border-hairline-strong text-charcoal inline-block">
+            {course.skillLevel}
+          </span>
+          <span className="text-xs font-medium uppercase tracking-wide px-2.5 py-1 rounded-full border border-hairline-strong text-charcoal inline-block">
+            {getCategoryMeta(course.category).label}
+          </span>
+        </div>
         <h1 className="display-lg text-ink font-medium mb-2">{course.title}</h1>
         <p className="body-md text-body">{course.topic}</p>
       </div>

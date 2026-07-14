@@ -14,6 +14,20 @@ export enum CourseStatus {
   ARCHIVED = 'archived',
 }
 
+export enum CourseCategory {
+  PROGRAMMING = 'programming',
+  DATA_SCIENCE = 'data_science',
+  DESIGN = 'design',
+  BUSINESS = 'business',
+  MARKETING = 'marketing',
+  MATHEMATICS = 'mathematics',
+  SCIENCE = 'science',
+  LANGUAGE = 'language',
+  PERSONAL_DEVELOPMENT = 'personal_development',
+  HEALTH_FITNESS = 'health_fitness',
+  OTHER = 'other',
+}
+
 @Entity('courses')
 export class Course {
   @PrimaryGeneratedColumn('uuid')
@@ -37,6 +51,13 @@ export class Course {
 
   @Column({ name: 'skill_level', type: 'varchar', length: 50 })
   skillLevel: string;
+
+  @Column({
+    type: 'enum',
+    enum: CourseCategory,
+    default: CourseCategory.OTHER,
+  })
+  category: CourseCategory;
 
   @Column({
     type: 'enum',

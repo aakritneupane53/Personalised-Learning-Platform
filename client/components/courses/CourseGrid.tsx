@@ -5,9 +5,12 @@ import CourseCard from "./CourseCard";
 
 function SkeletonCard() {
   return (
-    <div className="border border-hairline rounded-lg p-6 bg-canvas animate-pulse">
-      <div className="h-5 bg-surface-soft rounded-full w-3/4 mb-3" />
-      <div className="h-4 bg-surface-soft rounded-full w-1/2" />
+    <div className="border border-hairline rounded-lg bg-canvas overflow-hidden animate-pulse">
+      <div className="w-full aspect-video bg-surface-soft" />
+      <div className="p-6">
+        <div className="h-5 bg-surface-soft rounded-full w-3/4 mb-3" />
+        <div className="h-4 bg-surface-soft rounded-full w-1/2" />
+      </div>
     </div>
   );
 }

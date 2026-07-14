@@ -55,7 +55,11 @@ export default function ModuleContentPage({
       {!isLoading && !isError && hasContent && (
         <div className="flex flex-col gap-10">
           <LessonList lessons={lessons!} />
-          {quizzes && quizzes.length > 0 && <QuizList quizzes={quizzes} />}
+          {quizzes && quizzes.length > 0 && (
+            <div className="border-t border-hairline pt-10">
+              <QuizList quizzes={quizzes} />
+            </div>
+          )}
         </div>
       )}
     </main>

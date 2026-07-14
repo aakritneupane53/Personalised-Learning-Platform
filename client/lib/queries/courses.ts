@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/axios";
 import { CreateCourseInput } from "@/lib/validations";
+import { CourseCategory } from "@/lib/categories";
 
 export type CourseStatus = "draft" | "published" | "archived";
 
@@ -10,6 +11,7 @@ export interface Course {
   title: string;
   topic: string;
   skillLevel: string;
+  category: CourseCategory;
   status: CourseStatus;
   createdAt: string;
 }

@@ -6,7 +6,7 @@ import {
   IsOptional,
   MaxLength,
 } from 'class-validator';
-import { CourseStatus } from '../entities/course.entity';
+import { CourseStatus, CourseCategory } from '../entities/course.entity';
 
 export class CreateCourseDto {
   @IsString()
@@ -23,6 +23,12 @@ export class CreateCourseDto {
   @IsNotEmpty()
   @MaxLength(50)
   skillLevel: string;
+
+  @IsEnum(CourseCategory, {
+    message: `category must be one of the following values: ${Object.values(CourseCategory).join(', ')}`,
+  })
+  @IsOptional() // Optional because the entity defaults this to 'other'
+  category?: CourseCategory;
 
   @IsEnum(CourseStatus, {
     message: `status must be one of the following values: ${Object.values(CourseStatus).join(', ')}`,

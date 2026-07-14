@@ -56,7 +56,7 @@ export default function LoginPage() {
             <path d="M 60,30 L 65,33" />
             <path d="M 35,80 L 35,95 M 45,80 L 45,95 M 55,80 L 55,95 M 65,80 L 65,95" />
           </svg>
-          <span className="heading-md font-semibold text-ink">Sign in to Ollama Learn</span>
+          <span className="heading-md font-semibold text-ink">Sign in to Learnify</span>
         </Link>
 
         {/* Card wrapper */}
