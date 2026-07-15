@@ -6,7 +6,7 @@ import { CourseContentController } from './course-content.controller'; // Added 
 import { Lesson } from './entities/lesson.entity';
 import { QuizQuestionEntity } from './entities/quiz-question.entity';
 import { CourseModule } from '../course/course.module'; // Imports your ModulesService & CourseService
-import { AiModule } from '../ai/ai.module'; // Imports your configured AiService with groqDeep
+import { AiModule } from '../ai/ai.module'; // Imports your configured AiService with its provider fallback chain
 
 @Module({
   imports: [

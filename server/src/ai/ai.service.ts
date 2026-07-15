@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Groq from 'groq-sdk';
+import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
 import {
   CourseOutlineSchema,
@@ -21,15 +22,24 @@ function formatZodIssues(error: z.ZodError): string {
     .join('; ');
 }
 
+interface CompletionAttempt {
+  label: string;
+  run: () => Promise<string | null | undefined>;
+}
+
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
   private readonly groq: Groq;
-  private readonly groqDeep: Groq; // 🧠 Isolated client for heavy reasoning and content generation tasks
+  private readonly groqDeep1: Groq;
+  private readonly groqDeep2: Groq;
+  private readonly gemini: GoogleGenAI | null;
 
   constructor(private readonly configService: ConfigService) {
     const apiKey = this.configService.get<string>('GROQ_API_KEY');
-    const deepApiKey = this.configService.get<string>('GROQ_DEEP_API_KEY'); // New separate API key configuration
+    const deepApiKey1 = this.configService.get<string>('GROQ_DEEP_API_KEY1');
+    const deepApiKey2 = this.configService.get<string>('GROQ_DEEP_API_KEY2');
+    const geminiApiKey = this.configService.get<string>('GEMINI_API_KEY'); // Last-resort fallback provider, optional
 
     if (!apiKey) {
       throw new Error(
@@ -37,20 +47,133 @@ export class AiService {
       );
     }
 
-    if (!deepApiKey) {
+    if (!deepApiKey1) {
       throw new Error(
-        'GROQ_DEEP_API_KEY is missing from the environment variables configuration.',
+        'GROQ_DEEP_API_KEY1 is missing from the environment variables configuration.',
       );
     }
 
-    // Initialize both independent client wrappers
+    if (!deepApiKey2) {
+      throw new Error(
+        'GROQ_DEEP_API_KEY2 is missing from the environment variables configuration.',
+      );
+    }
+
+    // Initialize all independent client wrappers
     this.groq = new Groq({ apiKey });
-    this.groqDeep = new Groq({ apiKey: deepApiKey });
+    this.groqDeep1 = new Groq({ apiKey: deepApiKey1 });
+    this.groqDeep2 = new Groq({ apiKey: deepApiKey2 });
+
+    if (geminiApiKey) {
+      this.gemini = new GoogleGenAI({ apiKey: geminiApiKey });
+    } else {
+      this.gemini = null;
+      this.logger.warn(
+        'GEMINI_API_KEY is not set; the Gemini fallback tier is disabled.',
+      );
+    }
   }
 
   /**
-   * Generates a course outline using a single configured Groq client.
-   * The response is strictly validated before it is ever handed to a caller.
+   * Runs an ordered chain of provider attempts against the same prompt and
+   * validates each JSON response. Each tier gets its own retry budget before
+   * falling through to the next provider, so a single model/provider having a
+   * bad day (malformed JSON, outage, rate limit) doesn't fail the request as
+   * long as a later tier is configured and healthy.
+   */
+  private async requestWithFallback<T>(
+    attempts: CompletionAttempt[],
+    validate: (data: unknown) => T,
+    context: string,
+    maxAttemptsPerTier: number,
+  ): Promise<T> {
+    let lastError: unknown;
+
+    for (const { label, run } of attempts) {
+      for (let attempt = 1; attempt <= maxAttemptsPerTier; attempt++) {
+        try {
+          const rawContent = await run();
+
+          if (!rawContent) {
+            throw new Error('AI provider returned an empty response.');
+          }
+
+          const parsedData: unknown = JSON.parse(rawContent);
+          return validate(parsedData);
+        } catch (error) {
+          lastError = error;
+          const message =
+            error instanceof Error ? error.message : String(error);
+          this.logger.warn(
+            `${context} [${label}] attempt ${attempt}/${maxAttemptsPerTier} failed: ${message}`,
+          );
+
+          if (attempt < maxAttemptsPerTier) {
+            await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
+          }
+        }
+      }
+    }
+
+    const finalMessage =
+      lastError instanceof Error ? lastError.message : String(lastError);
+    throw new InternalServerErrorException(
+      `${context} failed on all providers: ${finalMessage}`,
+    );
+  }
+
+  private async callGroq(
+    client: Groq,
+    model: string,
+    systemInstruction: string,
+    userPrompt: string,
+    maxCompletionTokens: number,
+    temperature: number,
+  ): Promise<string | null | undefined> {
+    const chatCompletion = await client.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: systemInstruction },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature,
+      max_completion_tokens: maxCompletionTokens,
+      response_format: { type: 'json_object' },
+    });
+
+    return chatCompletion.choices[0]?.message?.content;
+  }
+
+  private async callGemini(
+    model: string,
+    systemInstruction: string,
+    userPrompt: string,
+    maxOutputTokens: number,
+    temperature: number,
+  ): Promise<string | null | undefined> {
+    if (!this.gemini) {
+      throw new Error('Gemini client is not configured.');
+    }
+
+    const response = await this.gemini.models.generateContent({
+      model,
+      contents: userPrompt,
+      config: {
+        systemInstruction,
+        responseMimeType: 'application/json',
+        temperature,
+        maxOutputTokens,
+      },
+    });
+
+    return response.text;
+  }
+
+  /**
+   * Generates a course outline. Same system/user prompt and output structure
+   * are reused across every provider tier — only the model/key backing the
+   * call changes as it falls through Groq's primary key, then both Groq deep
+   * keys, with Gemini tried only as the last resort.
    */
   async generateCourseOutline(
     topic: string,
@@ -63,52 +186,76 @@ export class AiService {
       `4-7 modules, ordered by learning sequence (array order = module order). No markdown, no commentary, no text outside the JSON object.`;
 
     const userPrompt = `Category: ${category}. Topic: "${topic}". Audience: ${skillLevel}. Generate the outline.`;
+    const maxTokens = 1024; // Bounds worst-case cost; a 7-module outline fits comfortably.
+    const temperature = 0.3;
 
-    try {
-      const chatCompletion = await this.groq.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          { role: 'system', content: systemInstruction },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.3,
-        max_completion_tokens: 1024, // Bounds worst-case cost; a 7-module outline fits comfortably.
-        response_format: { type: 'json_object' },
+    const attempts: CompletionAttempt[] = [
+      {
+        label: 'groq:llama-3.3-70b-versatile',
+        run: () =>
+          this.callGroq(
+            this.groq,
+            'llama-3.3-70b-versatile',
+            systemInstruction,
+            userPrompt,
+            maxTokens,
+            temperature,
+          ),
+      },
+      {
+        label: 'groq-deep1:openai/gpt-oss-120b',
+        run: () =>
+          this.callGroq(
+            this.groqDeep1,
+            'openai/gpt-oss-120b',
+            systemInstruction,
+            userPrompt,
+            maxTokens,
+            temperature,
+          ),
+      },
+      {
+        label: 'groq-deep2:openai/gpt-oss-120b',
+        run: () =>
+          this.callGroq(
+            this.groqDeep2,
+            'openai/gpt-oss-120b',
+            systemInstruction,
+            userPrompt,
+            maxTokens,
+            temperature,
+          ),
+      },
+    ];
+
+    if (this.gemini) {
+      attempts.push({
+        label: 'gemini:gemini-2.5-flash',
+        run: () =>
+          this.callGemini(
+            'gemini-2.5-flash',
+            systemInstruction,
+            userPrompt,
+            maxTokens,
+            temperature,
+          ),
       });
-
-      const rawContent = chatCompletion.choices[0]?.message?.content;
-      if (!rawContent) {
-        throw new InternalServerErrorException(
-          'AI provider returned an empty response string.',
-        );
-      }
-
-      const parsedData: unknown = JSON.parse(rawContent);
-      return this.validateOutlineStructure(parsedData);
-    } catch (error) {
-      if (error instanceof SyntaxError) {
-        throw new InternalServerErrorException(
-          'Failed to process AI payload: Invalid raw JSON format received.',
-        );
-      }
-      throw error;
     }
+
+    return this.requestWithFallback(
+      attempts,
+      (data) => this.validateOutlineStructure(data),
+      'Course outline generation',
+      2,
+    );
   }
 
-  /**
-   * Strictly validates the raw AI payload against CourseOutlineSchema.
-   * sortOrder isn't part of the AI contract — it's derived from array position
-   * so it can never be missing, duplicated, or out of sequence.
-   */
   private validateOutlineStructure(data: unknown): GeneratedCourseOutline {
     const result = CourseOutlineSchema.safeParse(data);
 
     if (!result.success) {
       const detail = formatZodIssues(result.error);
-      this.logger.warn(`Course outline validation failed: ${detail}`);
-      throw new InternalServerErrorException(
-        `AI outline structure validation failed: ${detail}`,
-      );
+      throw new Error(`structure validation failed: ${detail}`);
     }
 
     return {
@@ -123,8 +270,11 @@ export class AiService {
   }
 
   /**
-   * Generates deep lessons and quizzes for a specific module using the isolated heavy reasoning client.
-   * The response is strictly validated before it is ever handed to a caller.
+   * Generates module content (lessons + quiz). Same system/user prompt and
+   * output structure are reused across every provider tier — only the
+   * model/key backing the call changes as it falls through both Groq deep
+   * keys, then Groq's primary key, with Gemini tried only as the last
+   * resort.
    */
   async generateModuleContent(
     moduleTitle: string,
@@ -139,42 +289,70 @@ export class AiService {
       `2-3 lessons, exactly 3 quiz questions. correctAnswer must exactly match one option. Escape quotes/control chars. No markdown, no commentary, no text outside the JSON object.`;
 
     const userPrompt = `Course: "${courseTopic}" (${skillLevel}). Module: "${moduleTitle}" — ${moduleDescription}. Generate the content.`;
+    const maxTokens = 4096;
+    const temperature = 0.3; // Lowered slightly to reduce rambling/token usage
 
-    try {
-      const chatCompletion = await this.groqDeep.chat.completions.create({
-        model: 'openai/gpt-oss-120b',
-        messages: [
-          { role: 'system', content: systemInstruction },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.3, // Lowered slightly to reduce rambling/token usage
-        max_completion_tokens: 4096, // 🌟 CRITICAL: Grant the model enough maximum output budget to safely finish the array
-        response_format: { type: 'json_object' },
+    const attempts: CompletionAttempt[] = [
+      {
+        label: 'groq-deep1:openai/gpt-oss-120b',
+        run: () =>
+          this.callGroq(
+            this.groqDeep1,
+            'openai/gpt-oss-120b',
+            systemInstruction,
+            userPrompt,
+            maxTokens,
+            temperature,
+          ),
+      },
+      {
+        label: 'groq-deep2:openai/gpt-oss-120b',
+        run: () =>
+          this.callGroq(
+            this.groqDeep2,
+            'openai/gpt-oss-120b',
+            systemInstruction,
+            userPrompt,
+            maxTokens,
+            temperature,
+          ),
+      },
+      {
+        label: 'groq:llama-3.3-70b-versatile',
+        run: () =>
+          this.callGroq(
+            this.groq,
+            'llama-3.3-70b-versatile',
+            systemInstruction,
+            userPrompt,
+            maxTokens,
+            temperature,
+          ),
+      },
+    ];
+
+    if (this.gemini) {
+      attempts.push({
+        label: 'gemini:gemini-2.5-flash',
+        run: () =>
+          this.callGemini(
+            'gemini-2.5-flash',
+            systemInstruction,
+            userPrompt,
+            maxTokens,
+            temperature,
+          ),
       });
-
-      const rawContent = chatCompletion.choices[0]?.message?.content;
-      if (!rawContent) {
-        throw new InternalServerErrorException(
-          'Deep AI provider returned an empty content string.',
-        );
-      }
-
-      const parsedData: unknown = JSON.parse(rawContent);
-      return this.validateModuleContentStructure(parsedData);
-    } catch (error) {
-      if (error instanceof SyntaxError) {
-        throw new InternalServerErrorException(
-          'Failed to process deep AI content: Invalid JSON block format returned.',
-        );
-      }
-      throw error;
     }
+
+    return this.requestWithFallback(
+      attempts,
+      (data) => this.validateModuleContentStructure(data),
+      'Module content generation',
+      2,
+    );
   }
 
-  /**
-   * Strictly validates the raw AI payload against ModuleContentSchema, including
-   * the correctAnswer-must-be-one-of-options invariant that a shallow type check can't express.
-   */
   private validateModuleContentStructure(
     data: unknown,
   ): GeneratedModuleContent {
@@ -182,10 +360,7 @@ export class AiService {
 
     if (!result.success) {
       const detail = formatZodIssues(result.error);
-      this.logger.warn(`Module content validation failed: ${detail}`);
-      throw new InternalServerErrorException(
-        `AI module content validation failed: ${detail}`,
-      );
+      throw new Error(`structure validation failed: ${detail}`);
     }
 
     return result.data;

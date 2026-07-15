@@ -1,10 +1,26 @@
 import React from "react";
-import { Clock } from "lucide-react";
+import { Clock, Check } from "lucide-react";
 import { Lesson } from "@/lib/queries/course-content";
 
-export default function LessonItem({ lesson, index }: { lesson: Lesson; index: number }) {
+export default function LessonItem({
+  lesson,
+  index,
+  completed,
+  onToggleComplete,
+  isToggling,
+}: {
+  lesson: Lesson;
+  index: number;
+  completed: boolean;
+  onToggleComplete: () => void;
+  isToggling: boolean;
+}) {
   return (
-    <article className="border border-hairline rounded-lg p-6 md:p-8 bg-canvas">
+    <article
+      className={`border rounded-lg p-6 md:p-8 bg-canvas transition-colors ${
+        completed ? "border-green-600/40" : "border-hairline"
+      }`}
+    >
       <div className="flex items-start justify-between gap-4 mb-4">
         <h3 className="heading-sm text-ink">
           <span className="text-mute font-normal mr-2">{index + 1}.</span>
@@ -24,6 +40,20 @@ export default function LessonItem({ lesson, index }: { lesson: Lesson; index: n
           <pre className="code-sm text-ink whitespace-pre-wrap">{lesson.examples}</pre>
         </div>
       )}
+
+      <button
+        type="button"
+        onClick={onToggleComplete}
+        disabled={isToggling}
+        className={`mt-6 h-9 px-4 rounded-full button-md flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 ${
+          completed
+            ? "bg-green-50 text-green-800 border border-green-600/40 hover:bg-green-100"
+            : "bg-ink text-white hover:bg-ink-deep"
+        }`}
+      >
+        <Check size={14} />
+        {completed ? "Completed" : "Mark as complete"}
+      </button>
     </article>
   );
 }

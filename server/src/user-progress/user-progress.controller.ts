@@ -66,4 +66,14 @@ export class UserProgressController {
   async getMyProgress(@User() user: any) {
     return await this.userProgressService.findAllForUser(user.id);
   }
+
+  /**
+   * Get the authenticated user's dashboard summary: overall stats plus
+   * a per-course lesson-completion breakdown.
+   * GET /user-progress/summary
+   */
+  @Get('summary')
+  async getSummary(@User() user: any) {
+    return await this.userProgressService.getSummary(user.id);
+  }
 }

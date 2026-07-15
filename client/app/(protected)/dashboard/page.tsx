@@ -6,6 +6,7 @@ import { ArrowRight, Compass, Plus } from "lucide-react";
 import { useProfileQuery } from "@/lib/queries/auth";
 import { useMyCoursesQuery } from "@/lib/queries/courses";
 import CourseGrid from "@/components/courses/CourseGrid";
+import ProgressOverview from "@/components/dashboard/ProgressOverview";
 
 export default function DashboardPage() {
   const { data: profile } = useProfileQuery();
@@ -49,6 +50,13 @@ export default function DashboardPage() {
           </div>
           <ArrowRight size={16} className="text-mute flex-shrink-0" />
         </Link>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="heading-md text-ink">Your progress</h2>
+        </div>
+        <ProgressOverview />
       </div>
 
       <div>

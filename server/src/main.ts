@@ -7,8 +7,14 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.use(cookieParser());
+
+  // Comma-separated list of allowed origins, e.g. "https://app.example.com,https://staging.example.com"
+  const corsOrigin = process.env.CORS_ORIGIN?.split(',').map((origin) =>
+    origin.trim(),
+  ) ?? ['http://localhost:3000'];
+
   app.enableCors({
-    origin: 'http://localhost:3000',
+    origin: corsOrigin,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });

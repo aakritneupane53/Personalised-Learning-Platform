@@ -1,9 +1,13 @@
 "use client";
 
-import React, { use } from "react";
+import React, { use, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { useLessonsQuery, useQuizzesQuery } from "@/lib/queries/course-content";
+import {
+  useModuleProgressQuery,
+  useMarkLessonProgressMutation,
+} from "@/lib/queries/user-progress";
 import LessonList from "@/components/course-content/LessonList";
 import QuizList from "@/components/course-content/QuizList";
 import GenerateContentGate from "@/components/course-content/GenerateContentGate";
@@ -19,10 +23,25 @@ export default function ModuleContentPage({
     useLessonsQuery(moduleId);
   const { data: quizzes, isLoading: isQuizzesLoading, isError: isQuizzesError } =
     useQuizzesQuery(moduleId);
+  const { data: progress } = useModuleProgressQuery(moduleId);
+  const markProgressMutation = useMarkLessonProgressMutation(moduleId);
+  const [togglingLessonId, setTogglingLessonId] = useState<string | null>(null);
 
   const isLoading = isLessonsLoading || isQuizzesLoading;
   const isError = isLessonsError || isQuizzesError;
   const hasContent = (lessons?.length ?? 0) > 0;
+
+  const completedLessonIds = new Set(
+    (progress ?? []).filter((p) => p.completed).map((p) => p.lessonId),
+  );
+
+  const handleToggleComplete = (lessonId: string, completed: boolean) => {
+    setTogglingLessonId(lessonId);
+    markProgressMutation.mutate(
+      { lessonId, completed },
+      { onSettled: () => setTogglingLessonId(null) },
+    );
+  };
 
   return (
     <main className="flex-1 max-w-3xl w-full mx-auto px-6 py-12 flex flex-col gap-8 text-left">
@@ -54,7 +73,12 @@ export default function ModuleContentPage({
 
       {!isLoading && !isError && hasContent && (
         <div className="flex flex-col gap-10">
-          <LessonList lessons={lessons!} />
+          <LessonList
+            lessons={lessons!}
+            completedLessonIds={completedLessonIds}
+            onToggleComplete={handleToggleComplete}
+            togglingLessonId={togglingLessonId}
+          />
           {quizzes && quizzes.length > 0 && (
             <div className="border-t border-hairline pt-10">
               <QuizList quizzes={quizzes} />
