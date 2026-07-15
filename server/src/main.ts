@@ -1,11 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import cookieParser from 'cookie-parser';
 
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const configService = app.get(ConfigService);
 
   // Render sits behind a reverse proxy; without this, every request looks
   // like it comes from the proxy's IP, which would make ThrottlerGuard's
@@ -17,7 +19,9 @@ async function bootstrap() {
   // Comma-separated list of allowed origins, e.g. "https://app.example.com,https://staging.example.com".
   // Trailing slashes are stripped since the browser's Origin header never
   // includes one, and cors matches origins by exact string equality.
-  const configuredOrigins = process.env.CORS_ORIGIN?.split(',')
+  const configuredOrigins = configService
+    .get<string>('CORS_ORIGIN')
+    ?.split(',')
     .map((origin) => origin.trim().replace(/\/+$/, ''))
     .filter(Boolean);
   const corsOrigin =
@@ -37,6 +41,6 @@ async function bootstrap() {
       transform: true, // Automatically transforms payloads to match DTO class types
     }),
   );
-  await app.listen(process.env.PORT ?? 8000);
+  await app.listen(configService.get<string>('PORT') ?? 8000);
 }
 bootstrap();
