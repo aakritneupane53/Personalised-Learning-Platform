@@ -34,7 +34,7 @@ yarn-error.log*
 .env*
 !.env.example
 # Not a secret — the public backend URL, committed so any host builds against it automatically.
-!.env.production
+.env.production
 
 # vercel
 .vercel
