@@ -18,7 +18,7 @@ import { UserProgressModule } from './user-progress/user-progress.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.development.local', '.env.development'],
+      envFilePath: ['.env', '.env.development.local', '.env.development'],
     }),
 
     TypeOrmModule.forRootAsync({

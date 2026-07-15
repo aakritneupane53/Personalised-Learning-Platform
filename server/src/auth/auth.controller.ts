@@ -18,15 +18,24 @@ import { LoginUserDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { User } from './decorators/user.decorator';
 
+// Frontend (Vercel/Netlify) and backend (Render) live on different
+// registrable domains, so the refresh cookie must be sent cross-site.
+// SameSite=None requires Secure, which is why the two are tied together —
+// in dev, frontend/backend share "localhost" so Lax + non-Secure is fine.
+const isProduction = process.env.NODE_ENV === 'production';
+const REFRESH_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
+};
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   private setRefreshTokenCookie(res: Response, refreshToken: string) {
     res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      ...REFRESH_COOKIE_OPTIONS,
       maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
     });
   }
@@ -83,11 +92,7 @@ export class AuthController {
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   async logout(@Res({ passthrough: true }) res: Response) {
-    res.clearCookie('refreshToken', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-    });
+    res.clearCookie('refreshToken', REFRESH_COOKIE_OPTIONS);
 
     return {
       message: 'Logged out successfully',

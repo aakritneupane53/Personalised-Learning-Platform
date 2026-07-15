@@ -14,10 +14,16 @@ async function bootstrap() {
 
   app.use(cookieParser());
 
-  // Comma-separated list of allowed origins, e.g. "https://app.example.com,https://staging.example.com"
-  const corsOrigin = process.env.CORS_ORIGIN?.split(',').map((origin) =>
-    origin.trim(),
-  ) ?? ['http://localhost:3000'];
+  // Comma-separated list of allowed origins, e.g. "https://app.example.com,https://staging.example.com".
+  // Trailing slashes are stripped since the browser's Origin header never
+  // includes one, and cors matches origins by exact string equality.
+  const configuredOrigins = process.env.CORS_ORIGIN?.split(',')
+    .map((origin) => origin.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+  const corsOrigin =
+    configuredOrigins && configuredOrigins.length > 0
+      ? configuredOrigins
+      : ['http://localhost:3000'];
 
   app.enableCors({
     origin: corsOrigin,
