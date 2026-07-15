@@ -5,6 +5,10 @@ import { UserProgress } from './entities/user-progress.entity';
 import { Course } from '../course/entities/course.entity';
 import { ModuleEntity } from '../course/entities/module.entity';
 import { Lesson } from '../course-content/entities/lesson.entity';
+import { RedisService } from '../redis/redis.service';
+
+const SUMMARY_CACHE_TTL_SECONDS = 45;
+const summaryCacheKey = (userId: string) => `progress:summary:${userId}`;
 
 export interface CourseProgressSummary {
   courseId: string;
@@ -35,6 +39,7 @@ export class UserProgressService {
     private readonly progressRepository: Repository<UserProgress>,
     @InjectRepository(Course)
     private readonly courseRepository: Repository<Course>,
+    private readonly redisService: RedisService,
   ) {}
 
   /**
@@ -57,7 +62,12 @@ export class UserProgressService {
     progress.completed = completed;
     progress.completedAt = completed ? new Date() : null;
 
-    return await this.progressRepository.save(progress);
+    const saved = await this.progressRepository.save(progress);
+
+    // The cached summary is now stale — drop it rather than wait out the TTL.
+    await this.redisService.client.del(summaryCacheKey(userId));
+
+    return saved;
   }
 
   /**
@@ -96,6 +106,24 @@ export class UserProgressService {
    * every progress row reachable from this user's courses is already theirs.
    */
   async getSummary(userId: string): Promise<UserProgressSummary> {
+    const cacheKey = summaryCacheKey(userId);
+    const cached =
+      await this.redisService.client.get<UserProgressSummary>(cacheKey);
+
+    if (cached) {
+      return cached;
+    }
+
+    const summary = await this.computeSummary(userId);
+
+    await this.redisService.client.set(cacheKey, summary, {
+      ex: SUMMARY_CACHE_TTL_SECONDS,
+    });
+
+    return summary;
+  }
+
+  private async computeSummary(userId: string): Promise<UserProgressSummary> {
     const raw = await this.courseRepository
       .createQueryBuilder('course')
       .leftJoin(ModuleEntity, 'module', 'module.courseId = course.id')

@@ -19,6 +19,7 @@ import { Course, CourseCategory } from './entities/course.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'; // Adjust path to your actual Auth Guard
 import { User } from '../auth/decorators/user.decorator'; // Adjust path to your actual @User decorator
 import { ModulesService } from './module.service';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller('courses')
 @UseGuards(JwtAuthGuard) // Protects all routes in this controller
@@ -31,6 +32,7 @@ export class CourseController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 3, ttl: 60000 } }) // AI-backed course generation — tighter than the global default
   async create(
     @Body() createCourseDto: CreateCourseDto,
     @User() user: any, // Automatically extracts the user from the request context

@@ -6,6 +6,12 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Render sits behind a reverse proxy; without this, every request looks
+  // like it comes from the proxy's IP, which would make ThrottlerGuard's
+  // per-IP rate limiting apply globally instead of per client.
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
   app.use(cookieParser());
 
   // Comma-separated list of allowed origins, e.g. "https://app.example.com,https://staging.example.com"

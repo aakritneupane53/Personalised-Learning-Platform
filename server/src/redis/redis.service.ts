@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import Redis from 'ioredis';
+import { Redis } from '@upstash/redis';
 
 @Injectable()
 export class RedisService {
@@ -8,9 +8,8 @@ export class RedisService {
 
   constructor(private readonly configService: ConfigService) {
     this.redis = new Redis({
-      host: this.configService.get<string>('REDIS_HOST'),
-      port: Number(this.configService.get('REDIS_PORT')),
-      password: this.configService.get<string>('REDIS_PASSWORD') || undefined,
+      url: this.configService.getOrThrow<string>('UPSTASH_REDIS_REST_URL'),
+      token: this.configService.getOrThrow<string>('UPSTASH_REDIS_REST_TOKEN'),
     });
   }
 

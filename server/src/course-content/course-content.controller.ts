@@ -10,6 +10,7 @@ import {
 import { CourseContentService } from './course-content.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { User } from '../auth/decorators/user.decorator';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller('course-content')
 @UseGuards(JwtAuthGuard)
@@ -21,6 +22,7 @@ export class CourseContentController {
    * POST /course-content/modules/:moduleId/generate
    */
   @Post('modules/:moduleId/generate')
+  @Throttle({ default: { limit: 3, ttl: 60000 } }) // AI-backed content generation — tighter than the global default
   async generateModuleContent(
     @Param('moduleId', ParseUUIDPipe) moduleId: string,
     @User('id') user: any,
